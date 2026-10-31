@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Ask Gemini Screen Scanner</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Ask Gemini · Screen Scanner</h1>
+      <p>Drag a rectangle around the question, then choose <b>Scan & answer</b>.</p>
+    </div>
+    <button id="resetBtn" class="secondary">Reset selection</button>
+  </header>
+
+  <main>
+    <div id="status" class="status">Loading screenshot…</div>
+    <div id="stage" class="stage">
+      <canvas id="canvas"></canvas>
+      <div id="selection" aria-hidden="true"></div>
+    </div>
+    <div class="actions">
+      <button id="scanBtn" disabled>Scan & answer</button>
+      <span class="hint">Tip: select the question and its answer options, if any.</span>
+    </div>
+    <section id="result" class="result hidden">
+      <div class="resultHead">
+        <h2>Gemini answer</h2>
+        <button id="copyBtn" class="secondary">Copy answer</button>
+      </div>
+      <div id="ocrText" class="ocr"></div>
+      <div id="answerText" class="answer"></div>
+    </section>
+  </main>
+  <script src="select.js"></script>
+</body>
+</html>
