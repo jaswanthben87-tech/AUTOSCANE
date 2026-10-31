@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Ask Gemini AutoScan",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Scan visible questions locally with OCR and show Gemini answers on the same webpage.",
   "permissions": ["activeTab", "tabs", "storage", "scripting"],
   "background": { "service_worker": "background.js" },
@@ -12,6 +12,6 @@
       "description": "Automatically scan visible questions"
     }
   },
-  "host_permissions": ["http://127.0.0.1:3037/*"],
+  "host_permissions": ["http://127.0.0.1:3037/*", "https://*.vercel.app/*", "<all_urls>"],
   "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'self';" }
 }

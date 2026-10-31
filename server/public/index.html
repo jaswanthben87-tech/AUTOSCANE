@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ask Gemini AutoScan - Cloud Backend</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --card: #131b2e;
+      --card-border: #1e293b;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --accent: #8b5cf6;
+      --success: #10b981;
+      --error: #ef4444;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 32px 16px;
+    }
+    .container {
+      max-width: 860px;
+      width: 100%;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: var(--success);
+      font-size: 13px;
+      font-weight: 500;
+      margin-bottom: 16px;
+    }
+    .badge-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 10px var(--success);
+    }
+    h1 {
+      font-size: 2.4rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, #60a5fa 0%, #c084fc 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 10px;
+      letter-spacing: -0.02em;
+    }
+    p.subtitle {
+      color: var(--muted);
+      font-size: 1.05rem;
+      line-height: 1.5;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 20px;
+      margin-bottom: 32px;
+    }
+    @media (min-width: 768px) {
+      .grid { grid-template-columns: 1.2fr 0.8fr; }
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+    }
+    .card-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .upload-zone {
+      border: 2px dashed var(--card-border);
+      border-radius: 12px;
+      padding: 28px 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      background: rgba(255, 255, 255, 0.01);
+      margin-bottom: 16px;
+    }
+    .upload-zone:hover, .upload-zone.dragover {
+      border-color: var(--primary);
+      background: rgba(59, 130, 246, 0.05);
+    }
+    .upload-zone img {
+      max-width: 100%;
+      max-height: 180px;
+      border-radius: 8px;
+      margin-top: 10px;
+      display: none;
+    }
+    textarea, input[type="text"] {
+      width: 100%;
+      background: #0b1120;
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 14px;
+      resize: vertical;
+      margin-bottom: 16px;
+    }
+    textarea:focus, input[type="text"]:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 12px 20px;
+      background: linear-gradient(135deg, #2563eb, #7c3aed);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .btn:hover { opacity: 0.92; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .result-box {
+      margin-top: 20px;
+      background: #0b1120;
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 16px;
+      display: none;
+    }
+    .result-q {
+      font-weight: 600;
+      color: #93c5fd;
+      margin-bottom: 8px;
+    }
+    .result-ans {
+      background: rgba(59, 130, 246, 0.1);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      padding: 12px;
+      border-radius: 8px;
+      font-weight: 600;
+      color: #60a5fa;
+      margin-bottom: 8px;
+    }
+    .result-exp {
+      font-size: 13.5px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .step-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .step-list li {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+    .step-num {
+      flex-shrink: 0;
+      width: 24px;
+      height: 24px;
+      background: rgba(59, 130, 246, 0.15);
+      color: var(--primary);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 12px;
+    }
+    .code-box {
+      background: #070a12;
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: #a5b4fc;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 6px;
+      word-break: break-all;
+    }
+    .copy-btn {
+      background: #1e293b;
+      border: 1px solid #334155;
+      color: white;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      cursor: pointer;
+      flex-shrink: 0;
+      margin-left: 8px;
+    }
+    .copy-btn:hover { background: #334155; }
+    footer {
+      text-align: center;
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 24px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="badge">
+        <span class="badge-dot"></span>
+        <span id="health-status">Cloud API Active · Gemini 3.5 Flash</span>
+      </div>
+      <h1>Ask Gemini AutoScan</h1>
+      <p class="subtitle">Cloud backend service for your Chrome Extension & web question solver.</p>
+    </header>
+
+    <div class="grid">
+      <!-- Tester Section -->
+      <div class="card">
+        <div class="card-title">✨ Quick Question Tester</div>
+        <div class="upload-zone" id="upload-zone">
+          <input type="file" id="file-input" accept="image/*" style="display:none;">
+          <div id="upload-text">
+            <strong>Drop question screenshot here</strong>, paste with <kbd>Ctrl+V</kbd>, or click to browse
+          </div>
+          <img id="preview-img" alt="Preview">
+        </div>
+        <textarea id="dom-text" rows="2" placeholder="Or type/paste question text here (optional)..."></textarea>
+        <button class="btn" id="scan-btn">
+          <span>Solve Question</span>
+        </button>
+
+        <div class="result-box" id="result-box">
+          <div class="result-q" id="res-q"></div>
+          <div class="result-ans" id="res-ans"></div>
+          <div class="result-exp" id="res-exp"></div>
+        </div>
+      </div>
+
+      <!-- Extension Connect Guide -->
+      <div class="card">
+        <div class="card-title">🔌 Connect Chrome Extension</div>
+        <ol class="step-list">
+          <li>
+            <div class="step-num">1</div>
+            <div>
+              <strong>Your Backend URL:</strong>
+              <div class="code-box">
+                <span id="backend-url">Loading...</span>
+                <button class="copy-btn" id="copy-url-btn">Copy</button>
+              </div>
+            </div>
+          </li>
+          <li>
+            <div class="step-num">2</div>
+            <div>
+              <strong>Load Extension in Chrome:</strong><br>
+              Go to <code style="color:#93c5fd">chrome://extensions</code>, turn on <em>Developer mode</em>, click <em>Load unpacked</em>, and pick the <code>extension</code> folder.
+            </div>
+          </li>
+          <li>
+            <div class="step-num">3</div>
+            <div>
+              <strong>AutoScan with shortcut:</strong><br>
+              Press <kbd style="background:#1e293b;padding:2px 6px;border-radius:4px;border:1px solid #334155;font-size:12px;">Ctrl+Shift+Q</kbd> on any webpage with questions!
+            </div>
+          </li>
+        </ol>
+      </div>
+    </div>
+
+    <footer>
+      Ask Gemini AutoScan &bull; Powered by Google Gemini 3.5 Flash &bull; Cloud Serverless API
+    </footer>
+  </div>
+
+  <script>
+    const currentOrigin = window.location.origin;
+    document.getElementById('backend-url').textContent = currentOrigin;
+
+    document.getElementById('copy-url-btn').addEventListener('click', () => {
+      navigator.clipboard.writeText(currentOrigin);
+      const btn = document.getElementById('copy-url-btn');
+      btn.textContent = 'Copied!';
+      setTimeout(() => btn.textContent = 'Copy', 1500);
+    });
+
+    let currentBase64Image = null;
+    const uploadZone = document.getElementById('upload-zone');
+    const fileInput = document.getElementById('file-input');
+    const previewImg = document.getElementById('preview-img');
+    const uploadText = document.getElementById('upload-text');
+
+    uploadZone.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files?.[0]) handleImage(e.target.files[0]);
+    });
+
+    uploadZone.addEventListener('dragover', (e) => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+    uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+    uploadZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadZone.classList.remove('dragover');
+      if (e.dataTransfer.files?.[0]) handleImage(e.dataTransfer.files[0]);
+    });
+
+    window.addEventListener('paste', (e) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const item of items) {
+        if (item.type.startsWith('image/')) {
+          handleImage(item.getAsFile());
+          break;
+        }
+      }
+    });
+
+    function handleImage(file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        currentBase64Image = reader.result;
+        previewImg.src = currentBase64Image;
+        previewImg.style.display = 'block';
+        uploadText.style.display = 'none';
+      };
+      reader.readAsDataURL(file);
+    }
+
+    const scanBtn = document.getElementById('scan-btn');
+    const resultBox = document.getElementById('result-box');
+    const resQ = document.getElementById('res-q');
+    const resAns = document.getElementById('res-ans');
+    const resExp = document.getElementById('res-exp');
+
+    scanBtn.addEventListener('click', async () => {
+      const domText = document.getElementById('dom-text').value.trim();
+      if (!currentBase64Image && !domText) {
+        alert('Please drop an image/screenshot or type a question first!');
+        return;
+      }
+      scanBtn.disabled = true;
+      scanBtn.textContent = 'Solving with Gemini...';
+      resultBox.style.display = 'none';
+
+      try {
+        const fallbackImg = currentBase64Image || "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+        const res = await fetch('/api/autoscan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: fallbackImg, domText, firstOnly: true })
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error || 'Failed to scan question');
+
+        const q = data.questions?.[0];
+        if (!q) throw new Error('No question could be detected.');
+        resQ.textContent = q.question;
+        resAns.textContent = 'Answer: ' + q.answer;
+        resExp.textContent = q.explanation || '';
+        resultBox.style.display = 'block';
+      } catch (err) {
+        alert('Error: ' + err.message);
+      } finally {
+        scanBtn.disabled = false;
+        scanBtn.textContent = 'Solve Question';
+      }
+    });
+  </script>
+</body>
+</html>

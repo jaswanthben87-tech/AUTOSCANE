@@ -1,5 +1,15 @@
-const SERVER = "http://127.0.0.1:3037";
+const DEFAULT_SERVER = "http://127.0.0.1:3037";
 const runningTabs = new Set();
+
+async function getServerUrl() {
+  try {
+    const data = await chrome.storage.sync.get("serverUrl");
+    if (data?.serverUrl && typeof data.serverUrl === "string" && data.serverUrl.trim()) {
+      return data.serverUrl.trim().replace(/\/+$/, "");
+    }
+  } catch (_) {}
+  return DEFAULT_SERVER;
+}
 
 async function startScan() {
   let tab;
@@ -10,14 +20,14 @@ async function startScan() {
     if (runningTabs.has(tab.id)) return;
     runningTabs.add(tab.id);
 
-    // Capture first while the target tab is still active; never send this image to Gemini.
+    const server = await getServerUrl();
     const screenshot = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "png" });
     try {
       await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] });
     } catch (e) {
       throw new Error("Chrome cannot inject AutoScan on this page. Try a normal website; Chrome internal pages and protected pages are blocked.");
     }
-    await chrome.tabs.sendMessage(tab.id, { type: "AUTOSCAN_START", screenshot, server: SERVER });
+    await chrome.tabs.sendMessage(tab.id, { type: "AUTOSCAN_START", screenshot, server });
   } catch (error) {
     if (tab?.id) {
       try {
@@ -48,7 +58,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === "AUTOSCAN_PROCESS") {
     (async () => {
       try {
-        const response = await fetch(`${SERVER}/api/autoscan`, {
+        const activeServer = (message?.server || await getServerUrl()).replace(/\/+$/, "");
+        const response = await fetch(`${activeServer}/api/autoscan`, {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ image: message.image, domText: message.domText || "", firstOnly: Boolean(message.firstOnly) }),
           signal: AbortSignal.timeout(90000)
@@ -57,8 +68,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (!response.ok) throw new Error(result.error || `Backend request failed (${response.status}).`);
         sendResponse({ ok: true, result });
       } catch (e) {
-        const msg = e?.name === "TimeoutError" || e?.name === "AbortError" ? "Request timed out. Check the local server and retry." : (e?.message || "Cannot reach local backend at 127.0.0.1:3037. Start it with npm start.");
-        sendResponse({ ok: false, error: msg.includes("fetch") ? "Cannot reach the local backend at 127.0.0.1:3037. Start the server with npm start in the server folder." : msg });
+        const msg = e?.name === "TimeoutError" || e?.name === "AbortError" ? "Request timed out. Check the backend server and retry." : (e?.message || "Cannot reach backend. Make sure your server is running.");
+        sendResponse({ ok: false, error: msg });
       }
     })();
     return true;
