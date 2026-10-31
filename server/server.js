@@ -12,7 +12,7 @@ dotenv.config({ path: path.join(__dirname, ".env") });
 const app = express();
 const port = Number(process.env.PORT || 3037);
 const apiKey = process.env.GEMINI_API_KEY;
-const modelName = process.env.GEMINI_MODEL || "gemini-3.5-flash";
+const preferredModel = process.env.GEMINI_MODEL || "gemini-3.5-flash";
 
 if (!apiKey || apiKey.includes("PASTE_YOUR")) {
   console.warn("Notice: GEMINI_API_KEY is not set or using placeholder.");
@@ -24,20 +24,53 @@ app.use(express.json({ limit: "20mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
 const genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null;
-const getModel = () => {
+
+// Candidate models in fallback order to avoid 503 high-demand errors
+const candidateModels = [
+  preferredModel,
+  "gemini-3.5-flash-lite",
+  "gemini-flash-lite-latest"
+].filter((m, i, arr) => m && arr.indexOf(m) === i);
+
+async function generateWithFallback(payload, genConfig = {}) {
   if (!genAI) throw new Error("Missing GEMINI_API_KEY environment variable. Set it in your Vercel project settings.");
-  return genAI.getGenerativeModel({ model: modelName });
-};
+
+  let lastError = null;
+  for (const model of candidateModels) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const generativeModel = genAI.getGenerativeModel({ model });
+        const result = await generativeModel.generateContent({
+          ...payload,
+          generationConfig: genConfig
+        });
+        return { result, model };
+      } catch (err) {
+        lastError = err;
+        const msg = String(err?.message || "");
+        const isTransient = /503|high demand|429|quota|resource exhausted|overloaded|temporarily unavailable/i.test(msg);
+        if (isTransient && attempt === 0) {
+          console.warn(`Model ${model} hit temporary high demand. Retrying in 1.2s...`);
+          await new Promise(r => setTimeout(r, 1200));
+          continue;
+        }
+        console.warn(`Model ${model} unavailable (${msg.slice(0, 100)}). Switching to fallback model...`);
+        break;
+      }
+    }
+  }
+  throw lastError;
+}
 
 // Health & Status Check
-app.get("/health", (_req, res) => res.json({ ok: true, model: modelName, environment: process.env.VERCEL ? "vercel-cloud" : "local" }));
+app.get("/health", (_req, res) => res.json({ ok: true, model: preferredModel, candidates: candidateModels, environment: process.env.VERCEL ? "vercel-cloud" : "local" }));
 
 // Web Interface Landing Page
 app.get("/", (_req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// AutoScan Full Viewport API (Fast Multimodal Vision)
+// AutoScan Full Viewport API (Fast Multimodal Vision with Auto-Fallback)
 app.post("/api/autoscan", async (req, res) => {
   try {
     const imageData = req.body?.image;
@@ -69,19 +102,20 @@ If no question is found in the image, return {"questions":[]}.
 
 ${domText ? `ACCESSIBLE_DOM_TEXT (reference):\n${domText}` : ""}`;
 
-    const model = getModel();
-    const result = await model.generateContent({
-      contents: [
-        {
-          role: "user",
-          parts: [
-            { inlineData: { data: base64Data, mimeType } },
-            { text: prompt }
-          ]
-        }
-      ],
-      generationConfig: { responseMimeType: "application/json", temperature: 0.1 }
-    });
+    const { result, model: usedModel } = await generateWithFallback(
+      {
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { inlineData: { data: base64Data, mimeType } },
+              { text: prompt }
+            ]
+          }
+        ]
+      },
+      { responseMimeType: "application/json", temperature: 0.1 }
+    );
 
     let parsed;
     try {
@@ -106,11 +140,12 @@ ${domText ? `ACCESSIBLE_DOM_TEXT (reference):\n${domText}` : ""}`;
       return res.status(422).json({ error: "No question could be identified on screen. Scroll the question fully into view and retry." });
     }
 
-    return res.json({ questions, ocrText: "Processed via Gemini Vision" });
+    return res.json({ questions, model: usedModel, ocrText: "Processed via Gemini Vision" });
   } catch (error) {
     const message = String(error?.message || "");
     console.error("AutoScan request failed:", message);
     if (/quota|resource exhausted|429/i.test(message)) return res.status(429).json({ error: "Gemini quota is exhausted or rate-limited. Wait a little and retry." });
+    if (/503|high demand|overloaded/i.test(message)) return res.status(503).json({ error: "Gemini servers are experiencing high demand across all models. Please retry in a few moments." });
     if (/api key|unauthenticated|permission denied|401|403/i.test(message)) return res.status(502).json({ error: "Gemini rejected the API key. Check GEMINI_API_KEY environment variable." });
     return res.status(500).json({ error: "AutoScan failed: " + (message || "Internal error") });
   }
@@ -136,13 +171,19 @@ app.post("/api/scan", async (req, res) => {
       "Give a clear, direct answer followed by a short explanation when useful."
     ].join("\n");
 
-    const model = getModel();
-    const result = await model.generateContent([
-      promptText,
-      { inlineData: { data: base64Data, mimeType } }
-    ]);
+    const { result, model: usedModel } = await generateWithFallback({
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { inlineData: { data: base64Data, mimeType } },
+            { text: promptText }
+          ]
+        }
+      ]
+    });
     const answer = result.response.text();
-    return res.json({ extractedText: "Processed via Gemini Vision", answer });
+    return res.json({ extractedText: "Processed via Gemini Vision", model: usedModel, answer });
   } catch (error) {
     console.error("Scan request failed:", error?.message || error);
     return res.status(500).json({
@@ -155,7 +196,7 @@ app.post("/api/scan", async (req, res) => {
 if (!process.env.VERCEL) {
   app.listen(port, "0.0.0.0", () => {
     console.log(`Ask Gemini server listening at http://127.0.0.1:${port}`);
-    console.log("Fast multimodal vision processing ready.");
+    console.log(`Preferred model: ${preferredModel}, Fallbacks: ${candidateModels.join(", ")}`);
   });
 }
 
