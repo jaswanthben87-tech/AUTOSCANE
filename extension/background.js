@@ -1,4 +1,4 @@
-const DEFAULT_SERVER = "http://127.0.0.1:3037";
+const DEFAULT_SERVER = "https://server-pi-beryl-64.vercel.app";
 const runningTabs = new Set();
 
 async function getServerUrl() {

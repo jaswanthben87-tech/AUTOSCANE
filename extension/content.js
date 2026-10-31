@@ -1,7 +1,7 @@
 (() => {
   if (window.__askGeminiAutoScanInstalled) return;
   window.__askGeminiAutoScanInstalled = true;
-  let host, shadow, currentServer = "http://127.0.0.1:3037", busy = false, minimized = false;
+  let host, shadow, currentServer = "https://server-pi-beryl-64.vercel.app", busy = false, minimized = false;
   const $ = (s) => shadow.querySelector(s);
 
   function ensurePanel() {
